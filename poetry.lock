@@ -514,6 +514,22 @@ files = [
 pygments = "*"
 
 [[package]]
+name = "iterative-stratification"
+version = "0.1.9"
+description = "Package that provides scikit-learn compatible cross validators with stratification for multilabel data"
+optional = false
+python-versions = "*"
+files = [
+    {file = "iterative_stratification-0.1.9-py3-none-any.whl", hash = "sha256:476f8deff6753fb1725612fe41e59cc2058f8f2524ae5d1ccee88eb8c8d3de80"},
+    {file = "iterative_stratification-0.1.9.tar.gz", hash = "sha256:e7e299a3b28909fd0867d50ae6fc512def3bd482f71666ebaf0a3480b84cec42"},
+]
+
+[package.dependencies]
+numpy = "*"
+scikit-learn = "*"
+scipy = "*"
+
+[[package]]
 name = "jedi"
 version = "0.19.2"
 description = "An autocompletion tool for Python that can be used for text editors."
@@ -1853,4 +1869,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12,<3.13"
-content-hash = "aebf386c3a8fd84763e05658e03b494684cb1fbfc5c0cda7191677065b090b79"
+content-hash = "00403570cc9a82b1404a1d6abbe9cc63e5479a03d7c30d4d684d003ffdfe98b5"

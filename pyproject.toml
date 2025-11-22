@@ -17,6 +17,7 @@ seaborn = "^0.13.2"
 pulp = "^3.3.0"
 imbalanced-learn = "^0.14.0"
 ipykernel = "^7.1.0"
+iterative-stratification = "^0.1.9"
 
 
 [build-system]
