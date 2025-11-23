@@ -1,3 +1,6 @@
+import datetime
+from pathlib import Path
+
 import lightgbm as lgb
 import matplotlib.pyplot as plt
 import numpy as np
@@ -85,7 +88,7 @@ class Trainer:
     def train(self):
         self.model_cvr = lgb.LGBMClassifier(
             objective="binary",
-            num_iterations=100,
+            num_iterations=1000,
             learning_rate=0.01,
             num_leaves=31,
             random_state=self.random_seed,
@@ -111,7 +114,7 @@ class Trainer:
         val_point_df = self.val_df.loc[self.val_df["is_cv"] == 1]
         self.model_point = lgb.LGBMClassifier(
             objective="binary",
-            num_iterations=100,
+            num_iterations=1000,
             learning_rate=0.01,
             num_leaves=31,
             random_state=self.random_seed,
@@ -139,7 +142,9 @@ class Trainer:
             X_test = self.test_df[self.num_cols + self.cat_cols].copy()
             X_test["coupon_type"] = coupon_type
             X_test[self.cat_cols] = self.encoder.transform(X_test[self.cat_cols])
-            test_pred_df = self.test_df[["user_id"]].copy()
+            test_pred_df = self.test_df[
+                ["user_id", "coupon_type", "is_cv", "is_use"]
+            ].copy()
             test_pred_df["pred_coupon_type"] = coupon_type
             test_pred_df["pred_cvr"] = self.model_cvr.predict_proba(X_test)[:, 1]
             test_pred_df["pred_pur"] = self.model_point.predict_proba(X_test)[:, 1]
@@ -147,7 +152,7 @@ class Trainer:
         test_pred_df = pd.concat(test_pred_dfs)
         test_pred_df = pd.pivot(
             test_pred_df,
-            index=["user_id"],
+            index=["user_id", "coupon_type", "is_cv", "is_use"],
             columns=["pred_coupon_type"],
             values=["pred_cvr", "pred_pur"],
         )
@@ -213,6 +218,15 @@ def solve_optimization_problem(
 
 
 def main():
+    root_dir = Path(__file__).parent.parent
+    result_dir = root_dir.joinpath(
+        "result",
+        datetime.datetime.now(
+            tz=datetime.timezone(datetime.timedelta(hours=9))
+        ).strftime("%Y%m%d_%H%M%S"),
+    )
+    result_dir.mkdir(parents=True, exist_ok=True)
+
     trainer = Trainer()
     trainer.train()
     test_pred_df = trainer.predict()
@@ -245,17 +259,18 @@ def main():
         .reset_index(drop=False)
     )
 
-    total_cv_all_A = (segment_df["n_users"] * segment_df["pred_cvr_A"]).sum()
-    total_cv_all_B = (segment_df["n_users"] * segment_df["pred_cvr_B"]).sum()
     max_possible_cv = (test_pred_df[["pred_cvr_A", "pred_cvr_B"]].max(axis=1)).sum()
-
-    allowed_loss_ratios = [0.0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.1]
-    results = []
+    allowed_loss_ratios = [0.0, 0.01, 0.03, 0.05, 0.1, 0.2, 0.5]
     segments = segment_df["segment_id"].unique().tolist()
     coupon_types = list(trainer.coupon_map.keys())
+
+    results = []
     for ratio in allowed_loss_ratios:
         target_cv = max_possible_cv * (1 - ratio)
         res = solve_optimization_problem(segment_df, trainer.coupon_map, target_cv)
+
+        if not res:
+            continue
 
         assignment = res["assignment"]
         assignments = []
@@ -264,27 +279,101 @@ def main():
                 assignments.append(
                     {
                         "segment_id": s,
-                        "coupon_type": c,
+                        "pred_coupon_type": c,
                         "is_assigned": assignment[s][c].value(),
                     }
                 )
         point_assignment_df = pd.DataFrame(assignments)
+        point_assignment_df = point_assignment_df.loc[
+            point_assignment_df["is_assigned"] == 1
+        ].drop(columns="is_assigned")
 
-        # テストデータにポイントを割り当てて、実測データからコストと予約数を計算する
-        # ランダム割り当てとコスト、予約数、CPA=コスト/予約数を比較する
+        test_pred_assign_df = test_pred_df.copy()
+        test_pred_assign_df = test_pred_df.merge(
+            point_assignment_df, how="left", on="segment_id"
+        )
 
-        if res:
-            results.append(
-                {
-                    "allowed_loss_ratio": ratio,
-                    "target_cv": target_cv,
-                    "actual_cv": res["cv"],
-                    "min_cost": res["cost"],
-                    "cost_per_cv": res["cost"] / res["cv"] if res["cv"] > 0 else 0,
-                }
+        test_pred_assign_df["eq_flg"] = (
+            test_pred_assign_df["coupon_type"]
+            == test_pred_assign_df["pred_coupon_type"]
+        ).astype(int)
+
+        actual_assign_cv = test_pred_df["is_cv"].sum().item()
+        actual_assign_point_use = (
+            test_pred_df.groupby("coupon_type")["is_use"].sum().to_dict()
+        )
+        actual_assign_cost = 0
+        for c in trainer.coupon_map.keys():
+            actual_assign_cost += actual_assign_point_use[c] * trainer.coupon_map[c]
+        actual_assign_cpa = actual_assign_cost / actual_assign_cv
+
+        pred_assign_user_count = (
+            test_pred_assign_df.loc[test_pred_assign_df["eq_flg"] == 1]
+            .groupby("pred_coupon_type")["user_id"]
+            .nunique()
+            .to_dict()
+        )
+        pred_assign_cvr = (
+            test_pred_assign_df.loc[test_pred_assign_df["eq_flg"] == 1]
+            .groupby("pred_coupon_type")["is_cv"]
+            .mean()
+            .to_dict()
+        )
+        pred_assign_pur = (
+            test_pred_assign_df.loc[
+                (test_pred_assign_df["is_cv"] == 1)
+                & (test_pred_assign_df["eq_flg"] == 1)
+            ]
+            .groupby("pred_coupon_type")["is_use"]
+            .mean()
+            .to_dict()
+        )
+        pred_assign_cv = 0
+        pred_assign_cost = 0
+        for c in trainer.coupon_map.keys():
+            if c not in pred_assign_user_count:
+                continue
+            pred_assign_cv_c = pred_assign_user_count[c] * pred_assign_cvr[c]
+            pred_assign_cv_c = pred_assign_user_count[c] * pred_assign_cvr[c]
+            pred_assign_cost_c = (
+                pred_assign_cv_c * pred_assign_pur[c] * trainer.coupon_map[c]
             )
+            pred_assign_cv += pred_assign_cv_c
+            pred_assign_cost += pred_assign_cost_c
+        pred_assign_cpa = pred_assign_cost / pred_assign_cv
+
+        results.append(
+            {
+                "allowed_loss_ratio": ratio,
+                "actual_assign_cv": actual_assign_cv,
+                "actual_assign_cost": actual_assign_cost,
+                "actual_assign_cpa": actual_assign_cpa,
+                "pred_assign_cv": pred_assign_cv,
+                "pred_assign_cost": pred_assign_cost,
+                "pred_assign_cpa": pred_assign_cpa,
+                "pred_assign_cv_optim": res["cv"],
+                "pred_assign_cost_optim": res["cost"],
+                "pred_assign_cpa_optim": res["cost"] / res["cv"],
+            }
+        )
 
     result_df = pd.DataFrame(results)
+
+    plt.figure(figsize=(6, 10))
+    sns.lineplot(
+        result_df,
+        x="pred_assign_cv",
+        y="pred_assign_cost",
+        markers="o",
+        label="pred",
+    )
+    plt.tight_layout()
+    plt.savefig(result_dir.joinpath("cv_cost_curve.png"))
+
+    plt.figure(figsize=(6, 10))
+    sns.lineplot(result_df, x="allowed_loss_ratio", y="pred_assign_cpa")
+    plt.tight_layout()
+    plt.savefig(result_dir.joinpath("cpa.png"))
 
 
 if __name__ == "__main__":
