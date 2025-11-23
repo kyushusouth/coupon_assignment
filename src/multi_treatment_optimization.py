@@ -97,6 +97,7 @@ class Trainer:
         self.model_cvr.fit(
             X=self.train_df[self.num_cols + self.cat_cols],
             y=self.train_df[self.target_col_cv],
+            sample_weight=[1] * self.train_df.shape[0],
             eval_set=[
                 (
                     self.val_df[self.num_cols + self.cat_cols],
