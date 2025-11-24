@@ -104,6 +104,7 @@ def main():
     cat_cols = ["coupon_type"]
     uplift_map = {"A": 0.1, "B": 0.9}
     rng = np.random.default_rng(42)
+    num_segment = 10
 
     ml_module = MLModule(
         result_dir,
@@ -121,11 +122,11 @@ def main():
     test_pred_df = ml_module.predict()
 
     test_pred_df["cvr_rank_A"] = pd.qcut(
-        test_pred_df["pred_cvr_A"], 10, duplicates="drop"
+        test_pred_df["pred_cvr_A"], num_segment, duplicates="drop"
     )
     test_pred_df["cvr_rank_B"] = test_pred_df.groupby("cvr_rank_A", observed=False)[
         "pred_cvr_B"
-    ].transform(lambda x: pd.qcut(x, 10, duplicates="drop"))
+    ].transform(lambda x: pd.qcut(x, num_segment, duplicates="drop"))
     test_pred_df["segment_id"] = (
         test_pred_df["cvr_rank_A"].astype(str)
         + "_"
@@ -178,6 +179,21 @@ def main():
         plt.tight_layout()
         plt.savefig(result_dir.joinpath(f"{metric}_scatter.png"))
         plt.close()
+
+    # PUR予測モデルの学習が困難だったため、ログデータから集計した値を利用
+    segment_df = segment_mst_df[
+        [
+            "segment_id",
+            "n_users",
+            "pred_cvr_A",
+            "pred_cvr_B",
+            "actual_pur_A",
+            "actual_pur_B",
+        ]
+    ]
+    segment_df = segment_df.rename(
+        columns={"actual_pur_A": "pred_pur_A", "actual_pur_B": "pred_pur_B"}
+    )
 
     segments = segment_df["segment_id"].unique().tolist()
     segment_n_users_map = segment_df.groupby("segment_id")["n_users"].max().to_dict()
@@ -242,6 +258,23 @@ def main():
 
     result_df = pd.DataFrame(results)
     result_df.to_csv(result_dir.joinpath("result.csv"), index=False)
+
+    result_df["loss_ratio_estimated"] = (
+        result_df["estimated_cv"] / result_df["estimated_cv_B"]
+    )
+    _, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 8), dpi=300)
+    plt.plot(
+        result_df["loss_ratio_estimated"].values,
+        result_df["estimated_cpa"].values,
+        marker="o",
+        label="Optimized",
+    )
+    plt.plot([1], [estimated_cpa_B], marker="x", label="All B")
+    plt.xlabel("CV Decrease Rate")
+    plt.ylabel("Estimated CPA")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(result_dir.joinpath("loss_cpa_curve.png"))
 
 
 if __name__ == "__main__":

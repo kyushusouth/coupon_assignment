@@ -15,13 +15,14 @@ sns.set_style("whitegrid")
 
 
 def solve_cost_minimization_problem(
-    segment_df: pd.DataFrame, coupon_map: dict[str, int]
+    segment_df: pd.DataFrame, coupon_map: dict[str, int], min_assign_rate: float
 ):
     """コストを最小化する
 
     Args:
         segment_df: ユーザーをセグメント分けしたデータ
         coupon_map: クーポン名をキー、割引額をバリューとする辞書
+        min_assign_rate: 最低配布率
 
     Returns:
         最適化問題を解くことができた場合: セグメントに対するクーポンの付与割合
@@ -65,10 +66,10 @@ def solve_cost_minimization_problem(
     for s in segments:
         prob += pulp.lpSum([x[s][c] for c in coupon_types]) == 1
 
-    # 制約条件2: 各セグメントにすべてのクーポンを10%以上割り当てる
+    # 制約条件2: 各セグメントにすべてのクーポンをmin_assign_rate以上割り当てる
     for s in segments:
         for c in coupon_types:
-            prob += x[s][c] >= 0.1
+            prob += x[s][c] >= min_assign_rate
 
     prob.solve()
 
@@ -80,7 +81,10 @@ def solve_cost_minimization_problem(
 
 
 def solve_cv_maximization_problem(
-    segment_df: pd.DataFrame, coupon_map: dict[str, int], budget: int
+    segment_df: pd.DataFrame,
+    coupon_map: dict[str, int],
+    budget: int,
+    min_assign_rate: float,
 ):
     """CV数を最大化する
 
@@ -88,6 +92,7 @@ def solve_cv_maximization_problem(
         segment_df: ユーザーをセグメント分けしたデータ
         coupon_map: クーポン名をキー、割引額をバリューとする辞書
         budget: 予算
+        min_assign_rate: 最低配布率
 
     Returns:
         最適化問題を解くことができた場合: セグメントに対するクーポンの付与割合
@@ -143,10 +148,10 @@ def solve_cv_maximization_problem(
         <= budget
     )
 
-    # 制約条件3: 各セグメントにすべてのクーポンを10%以上割り当てる
+    # 制約条件3: 各セグメントにすべてのクーポンをmin_assign_rate以上割り当てる
     for s in segments:
         for c in coupon_types:
-            prob += x[s][c] >= 0.1
+            prob += x[s][c] >= min_assign_rate
 
     prob.solve()
 
@@ -175,6 +180,8 @@ def main():
     cat_cols = ["coupon_type"]
     uplift_map = {"A": 0.1, "B": 0.9, "C": 1.7}
     rng = np.random.default_rng(42)
+    min_assign_rate = 0.1
+    num_segment = 6
 
     ml_module = MLModule(
         result_dir,
@@ -192,14 +199,14 @@ def main():
     test_pred_df = ml_module.predict()
 
     test_pred_df["cvr_rank_A"] = pd.qcut(
-        test_pred_df["pred_cvr_A"], 10, duplicates="drop"
+        test_pred_df["pred_cvr_A"], num_segment, duplicates="drop"
     )
     test_pred_df["cvr_rank_B"] = test_pred_df.groupby("cvr_rank_A", observed=False)[
         "pred_cvr_B"
-    ].transform(lambda x: pd.qcut(x, 10, duplicates="drop"))
+    ].transform(lambda x: pd.qcut(x, num_segment, duplicates="drop"))
     test_pred_df["cvr_rank_C"] = test_pred_df.groupby(
         ["cvr_rank_A", "cvr_rank_B"], observed=False
-    )["pred_cvr_C"].transform(lambda x: pd.qcut(x, 10, duplicates="drop"))
+    )["pred_cvr_C"].transform(lambda x: pd.qcut(x, num_segment, duplicates="drop"))
     test_pred_df["segment_id"] = (
         test_pred_df["cvr_rank_A"].astype(str)
         + "_"
@@ -257,6 +264,27 @@ def main():
         plt.savefig(result_dir.joinpath(f"{metric}_scatter.png"))
         plt.close()
 
+    # PUR予測モデルの学習が困難だったため、ログデータから集計した値を利用
+    segment_df = segment_mst_df[
+        [
+            "segment_id",
+            "n_users",
+            "pred_cvr_A",
+            "pred_cvr_B",
+            "pred_cvr_C",
+            "actual_pur_A",
+            "actual_pur_B",
+            "actual_pur_C",
+        ]
+    ]
+    segment_df = segment_df.rename(
+        columns={
+            "actual_pur_A": "pred_pur_A",
+            "actual_pur_B": "pred_pur_B",
+            "actual_pur_C": "pred_pur_C",
+        }
+    )
+
     segments = segment_df["segment_id"].unique().tolist()
     segment_n_users_map = segment_df.groupby("segment_id")["n_users"].max().to_dict()
 
@@ -268,13 +296,23 @@ def main():
     estimated_cost_B = estimated_cv_B * pur_B * ml_module.coupon_map["B"]
     estimated_cpa_B = estimated_cost_B / estimated_cv_B
 
-    min_cost = solve_cost_minimization_problem(segment_df, ml_module.coupon_map)
+    min_cost = solve_cost_minimization_problem(
+        segment_df, ml_module.coupon_map, min_assign_rate
+    )
 
     coupon_assign_dfs = []
     results = []
-    for budget in sorted(list(range(min_cost, 50000000, 2000000)) + [estimated_cost_B]):
+    for budget in sorted(
+        list(range(min_cost, 50000000, 2000000))
+        + [
+            estimated_cost_B,
+            estimated_cost_B * 0.95,
+            estimated_cost_B * 0.97,
+            estimated_cost_B * 0.99,
+        ]
+    ):
         assign_solution = solve_cv_maximization_problem(
-            segment_df, ml_module.coupon_map, budget
+            segment_df, ml_module.coupon_map, budget, min_assign_rate
         )
 
         if not assign_solution:
@@ -314,8 +352,26 @@ def main():
 
     coupon_assign_df = pd.concat(coupon_assign_dfs)
     coupon_assign_df.to_csv(result_dir.joinpath("coupon_assign.csv"), index=False)
+
     result_df = pd.DataFrame(results)
     result_df.to_csv(result_dir.joinpath("result.csv"), index=False)
+
+    result_df["cost_ratio_estimated"] = (
+        result_df["estimated_cost"] / result_df["estimated_cost_B"]
+    )
+    _, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 8), dpi=300)
+    plt.plot(
+        result_df["cost_ratio_estimated"].values,
+        result_df["estimated_cv"].values,
+        marker="o",
+        label="Optimized",
+    )
+    plt.plot([1], [estimated_cv_B], marker="x", label="All B")
+    plt.xlabel("Cost Increase Rate")
+    plt.ylabel("Estimated CV")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(result_dir.joinpath("cost_cv_curve.png"))
 
 
 if __name__ == "__main__":
