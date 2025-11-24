@@ -34,7 +34,7 @@ class Trainer:
         )
         self._preprocess_data()
 
-    def _generate_dummy_data(self):
+    def _generate_dummy_data(self) -> pd.DataFrame:
         df = pd.DataFrame(
             {
                 "user_id": range(self.n_users),
