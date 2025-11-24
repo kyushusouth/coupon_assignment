@@ -1,10 +1,8 @@
 import datetime
-import math
 import random
 from pathlib import Path
 
 import lightgbm as lgb
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pulp
