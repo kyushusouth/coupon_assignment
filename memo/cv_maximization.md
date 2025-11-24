@@ -60,13 +60,13 @@ $B$: 予算
 
 ```math
 \begin{align*}
-& (x_{s, a_{3}} N_{s} (r_{s, a_{3}} - r_{s, a_{2}}) - x_{s, a_{1}} N_{s} (r_{s, a_{2}} - r_{s, a_{1}})) \\
-& = N_{s} (x_{s, a_{3}}(r_{s, a_{3}} - r_{s, a_{2}}) - x_{s, a_{1}}(r_{s, a_{2}} - r_{s, a_{1}})) \\
-& = N_{s} (x_{s, a_{3}}r_{s, a_{3}} - x_{s, a_{3}}r_{s, a_{2}} - x_{s, a_{1}}r_{s, a_{2}} + x_{s, a_{1}}r_{s, a_{1}}) \\
-& = N_{s} (x_{s, a_{3}}r_{s, a_{3}} + x_{s, a_{1}}r_{s, a_{1}} - r_{s, a_{2}}(x_{s, a_{3}} + x_{s, a_{1}})) \\
-& = N_{s} (x_{s, a_{3}}r_{s, a_{3}} + x_{s, a_{1}}r_{s, a_{1}} - r_{s, a_{2}}(1 - x_{s, a_{2}})) \\
-& = N_{s} \left(\sum_{a \in A} x_{s, a}r_{s, a} - r_{s, a_{2}}\right) \\
-& = \sum_{a \in A} x_{s, a}N_{s}r_{s, a} - N_{s}r_{s, a_{2}} \\
+    & (x_{s, a_{3}} N_{s} (r_{s, a_{3}} - r_{s, a_{2}}) - x_{s, a_{1}} N_{s} (r_{s, a_{2}} - r_{s, a_{1}})) \\
+    & = N_{s} (x_{s, a_{3}}(r_{s, a_{3}} - r_{s, a_{2}}) - x_{s, a_{1}}(r_{s, a_{2}} - r_{s, a_{1}})) \\
+    & = N_{s} (x_{s, a_{3}}r_{s, a_{3}} - x_{s, a_{3}}r_{s, a_{2}} - x_{s, a_{1}}r_{s, a_{2}} + x_{s, a_{1}}r_{s, a_{1}}) \\
+    & = N_{s} (x_{s, a_{3}}r_{s, a_{3}} + x_{s, a_{1}}r_{s, a_{1}} - r_{s, a_{2}}(x_{s, a_{3}} + x_{s, a_{1}})) \\
+    & = N_{s} (x_{s, a_{3}}r_{s, a_{3}} + x_{s, a_{1}}r_{s, a_{1}} - r_{s, a_{2}}(1 - x_{s, a_{2}})) \\
+    & = N_{s} \left(\sum_{a \in A} x_{s, a}r_{s, a} - r_{s, a_{2}}\right) \\
+    & = \sum_{a \in A} x_{s, a}N_{s}r_{s, a} - N_{s}r_{s, a_{2}} \\
 \end{align*}
 ```
 
@@ -103,13 +103,13 @@ l(y, f_{\theta}(u, a)) = y\log f_{\theta}(u, a) + (1 - y)\log(1 - f_{\theta}(u, 
 
 ```math
 \begin{align*}
-\mathbb{E}[\mathcal{L}_{\text{ips}}(\theta)] & = \mathbb{E}\left[\frac{1}{|U||A|} \sum_{(u, a) \in \mathcal{O}} \frac{l(y, f_{\theta}(u, a))}{P(a|u)}\right] \\
-& = \mathbb{E}\left[\frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} \frac{O_{u, a} l(y, f_{\theta}(u, a))}{P(a|u)}\right] \\
-& = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} \mathbb{E}\left[\frac{O_{u, a} l(y, f_{\theta}(u, a))}{P(a|u)}\right] \\
-& = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} P(O_{u, a} = 1) \frac{l(y, f_{\theta}(u, a))}{P(a|u)} \\
-& = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} P(a|u) \frac{l(y, f_{\theta}(u, a))}{P(a|u)} \\
-& = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} l(y, f_{\theta}(u, a)) \\
-& = \mathcal{L}_{\text{ideal}}(\theta)
+    \mathbb{E}[\mathcal{L}_{\text{ips}}(\theta)] & = \mathbb{E}\left[\frac{1}{|U||A|} \sum_{(u, a) \in \mathcal{O}} \frac{l(y, f_{\theta}(u, a))}{P(a|u)}\right] \\
+    & = \mathbb{E}\left[\frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} \frac{O_{u, a} l(y, f_{\theta}(u, a))}{P(a|u)}\right] \\
+    & = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} \mathbb{E}\left[\frac{O_{u, a} l(y, f_{\theta}(u, a))}{P(a|u)}\right] \\
+    & = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} P(O_{u, a} = 1) \frac{l(y, f_{\theta}(u, a))}{P(a|u)} \\
+    & = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} P(a|u) \frac{l(y, f_{\theta}(u, a))}{P(a|u)} \\
+    & = \frac{1}{|U||A|} \sum_{u \in U}\sum_{a \in A} l(y, f_{\theta}(u, a)) \\
+    & = \mathcal{L}_{\text{ideal}}(\theta)
 \end{align*}
 ```
 
